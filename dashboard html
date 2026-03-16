@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GNSS LoRa Dashboard</title>
+
+  <link rel="stylesheet" href="./leaflet/leaflet.css" />
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+    }
+
+    #wrap {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      height: 100%;
+    }
+
+    #topbar {
+      padding: 12px 16px;
+      background: #1b1b1b;
+      border-bottom: 1px solid #333;
+      display: grid;
+      grid-template-columns: repeat(7, minmax(100px, 1fr));
+      gap: 10px;
+    }
+
+    .card {
+      background: #202020;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .label {
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 4px;
+    }
+
+    .value {
+      font-size: 16px;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    #map {
+      height: 100%;
+      width: 100%;
+      background: #1a1a1a;
+    }
+
+    .ok { color: #86d993; }
+    .bad { color: #ff8c8c; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="topbar">
+      <div class="card"><div class="label">Fix</div><div class="value" id="fix">-</div></div>
+      <div class="card"><div class="label">Satellites</div><div class="value" id="sat">-</div></div>
+      <div class="card"><div class="label">Latitude</div><div class="value" id="lat">-</div></div>
+      <div class="card"><div class="label">Longitude</div><div class="value" id="lon">-</div></div>
+      <div class="card"><div class="label">Altitude</div><div class="value" id="alt">-</div></div>
+      <div class="card"><div class="label">Packets</div><div class="value" id="packets">-</div></div>
+      <div class="card"><div class="label">Last Update UTC</div><div class="value" id="time">-</div></div>
+    </div>
+    <div id="map"></div>
+  </div>
+
+  <script src="./leaflet/leaflet.js"></script>
+  <script>
+    const defaultCenter = [53.4066, -2.9665];
+    const map = L.map('map').setView(defaultCenter, 13);
+
+    const tileLayer = L.tileLayer('./tiles/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: 'Offline tiles'
+    }).addTo(map);
+
+    let marker = null;
+    let accuracyCircle = null;
+    let hasCentered = false;
+
+    function setText(id, value, good = null) {
+      const el = document.getElementById(id);
+      el.textContent = value;
+      el.className = 'value';
+      if (good === true) el.classList.add('ok');
+      if (good === false) el.classList.add('bad');
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch('./latest.json?_=' + Date.now(), { cache: 'no-store' });
+        const data = await res.json();
+
+        setText('fix', data.fix === 1 ? 'FIXED' : 'NO FIX', data.fix === 1);
+        setText('sat', data.sat ?? '-');
+        setText('lat', data.lat ?? '-');
+        setText('lon', data.lon ?? '-');
+        setText('alt', data.alt ?? '-');
+        setText('packets', data.packet_count ?? '-');
+        setText('time', data.time_utc ?? '-');
+
+        if (data.fix === 1 && data.lat != null && data.lon != null) {
+          const pos = [data.lat, data.lon];
+
+          if (!marker) {
+            marker = L.marker(pos).addTo(map);
+            marker.bindPopup('LoRa GNSS Node');
+          } else {
+            marker.setLatLng(pos);
+          }
+
+          if (!accuracyCircle) {
+            accuracyCircle = L.circle(pos, { radius: 10 }).addTo(map);
+          } else {
+            accuracyCircle.setLatLng(pos);
+          }
+
+          if (!hasCentered) {
+            map.setView(pos, 16);
+            hasCentered = true;
+          }
+        }
+      } catch (err) {
+        setText('time', 'dashboard fetch error', false);
+      }
+    }
+
+    tileLayer.on('tileerror', function() {
+      // harmless if tiles are not present yet
+    });
+
+    refresh();
+    setInterval(refresh, 2000);
+  </script>
+</body>
+</html>
