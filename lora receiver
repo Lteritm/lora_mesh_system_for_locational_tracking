@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+import json
+import os
+import subprocess
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+BASE_DIR = Path.home() / "gnss_dashboard"
+RX_DIR = Path.home() / "rpi-lora-tranceiver" / "dragino_lora_app"
+LATEST_JSON = BASE_DIR / "latest.json"
+
+packet_count = 0
+
+
+def parse_payload(payload: str):
+    parts = payload.strip().split(",")
+    fields = {}
+
+    for part in parts:
+        if "=" not in part:
+            return None
+        k, v = part.split("=", 1)
+        fields[k.strip()] = v.strip()
+
+    required = {"LAT", "LON", "FIX", "SAT"}
+    if not required.issubset(fields.keys()):
+        return None
+
+    try:
+        fix = int(fields["FIX"])
+        sat = int(fields["SAT"])
+    except ValueError:
+        return None
+
+    lat = None
+    lon = None
+    alt = None
+
+    if fields["LAT"] != "NOFIX" and fields["LON"] != "NOFIX":
+        try:
+            lat = float(fields["LAT"])
+            lon = float(fields["LON"])
+        except ValueError:
+            return None
+
+    if "ALT" in fields:
+        try:
+            alt = float(fields["ALT"])
+        except ValueError:
+            alt = None
+
+    return {
+        "raw": payload,
+        "fix": fix,
+        "sat": sat,
+        "lat": lat,
+        "lon": lon,
+        "alt": alt,
+    }
+
+
+def write_latest(data: dict):
+    tmp = LATEST_JSON.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    os.replace(tmp, LATEST_JSON)
+
+
+def run_receiver():
+    global packet_count
+
+    cmd = ["stdbuf", "-oL", "-eL", "./dragino_lora_app", "rec"]
+
+    while True:
+        print("[INFO] starting Dragino receiver")
+        proc = subprocess.Popen(
+            cmd,
+            cwd=RX_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+
+        try:
+            assert proc.stdout is not None
+            for raw_line in proc.stdout:
+                line = raw_line.strip()
+                if not line:
+                    continue
+
+                if line.startswith("Payload:"):
+                    payload = line.split("Payload:", 1)[1].strip()
+                    parsed = parse_payload(payload)
+                    if parsed is None:
+                        print(f"[DROP] invalid payload: {payload}")
+                        continue
+
+                    packet_count += 1
+                    record = {
+                        "packet_count": packet_count,
+                        "time_utc": datetime.now(timezone.utc).isoformat(),
+                        **parsed,
+                    }
+                    write_latest(record)
+                    print(
+                        f"[OK] packets={packet_count} "
+                        f"fix={record['fix']} sat={record['sat']} "
+                        f"lat={record['lat']} lon={record['lon']} alt={record['alt']}"
+                    )
+                elif line == "CRC error":
+                    print("[DROP] CRC error")
+                else:
+                    # Ignore radio stats / junk text / startup lines
+                    pass
+
+        finally:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+        print("[WARN] receiver exited, restarting in 2 seconds")
+        time.sleep(2)
+
+
+if __name__ == "__main__":
+    BASE_DIR.mkdir(parents=True, exist_ok=True)
+    run_receiver()
