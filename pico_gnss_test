@@ -1,0 +1,112 @@
+#include <TinyGPSPlus.h>
+
+TinyGPSPlus gps;
+
+static const uint8_t GNSS_RX_PIN = 5;   // Pico RX <- module TX
+static const uint8_t GNSS_TX_PIN = 4;   // Pico TX -> module RX
+static const uint8_t GNSS_PPS_PIN = 6;  // optional in this step
+
+static uint32_t lastPrint = 0;
+
+void printGpsStatus() {
+  Serial.println("----- GNSS status -----");
+
+  Serial.print("charsProcessed: ");
+  Serial.println(gps.charsProcessed());
+
+  Serial.print("sentencesWithFix: ");
+  Serial.println(gps.sentencesWithFix());
+
+  Serial.print("satellites: ");
+  if (gps.satellites.isValid()) {
+    Serial.println(gps.satellites.value());
+  } else {
+    Serial.println("INVALID");
+  }
+
+  Serial.print("hdop: ");
+  if (gps.hdop.isValid()) {
+    Serial.println(gps.hdop.hdop());
+  } else {
+    Serial.println("INVALID");
+  }
+
+  Serial.print("location valid: ");
+  Serial.println(gps.location.isValid() ? "YES" : "NO");
+
+  if (gps.location.isValid()) {
+    Serial.print("lat: ");
+    Serial.println(gps.location.lat(), 7);
+
+    Serial.print("lon: ");
+    Serial.println(gps.location.lng(), 7);
+  }
+
+  Serial.print("altitude valid: ");
+  Serial.println(gps.altitude.isValid() ? "YES" : "NO");
+
+  if (gps.altitude.isValid()) {
+    Serial.print("altitude(m): ");
+    Serial.println(gps.altitude.meters());
+  }
+
+  Serial.print("date valid: ");
+  Serial.println(gps.date.isValid() ? "YES" : "NO");
+
+  if (gps.date.isValid()) {
+    Serial.print("date: ");
+    Serial.print(gps.date.year());
+    Serial.print("-");
+    if (gps.date.month() < 10) Serial.print("0");
+    Serial.print(gps.date.month());
+    Serial.print("-");
+    if (gps.date.day() < 10) Serial.print("0");
+    Serial.println(gps.date.day());
+  }
+
+  Serial.print("time valid: ");
+  Serial.println(gps.time.isValid() ? "YES" : "NO");
+
+  if (gps.time.isValid()) {
+    Serial.print("time(UTC): ");
+    if (gps.time.hour() < 10) Serial.print("0");
+    Serial.print(gps.time.hour());
+    Serial.print(":");
+    if (gps.time.minute() < 10) Serial.print("0");
+    Serial.print(gps.time.minute());
+    Serial.print(":");
+    if (gps.time.second() < 10) Serial.print("0");
+    Serial.println(gps.time.second());
+  }
+
+  Serial.print("PPS pin level: ");
+  Serial.println(digitalRead(GNSS_PPS_PIN));
+
+  Serial.println();
+}
+
+void setup() {
+  pinMode(GNSS_PPS_PIN, INPUT);
+
+  Serial.begin(115200);
+  delay(1500);
+
+  Serial1.setRX(GNSS_RX_PIN);
+  Serial1.setTX(GNSS_TX_PIN);
+  Serial1.begin(9600);
+
+  Serial.println("L76X GNSS test starting...");
+  Serial.println("Waiting for NMEA data and GNSS fix...");
+  Serial.println();
+}
+
+void loop() {
+  while (Serial1.available() > 0) {
+    gps.encode(Serial1.read());
+  }
+
+  if (millis() - lastPrint >= 1000) {
+    lastPrint = millis();
+    printGpsStatus();
+  }
+}
