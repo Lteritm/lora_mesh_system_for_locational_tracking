@@ -1,0 +1,54 @@
+# System Baseline v1
+
+## Objective
+Build a 2–3 node LoRa GNSS system:
+- Raspberry Pi 4 = gateway
+- Raspberry Pi Pico 2W = end nodes
+- each node reads local GNSS
+- each node transmits compact LoRa packets
+- gateway receives packets and stores latest state per node
+- gateway later serves an offline map UI
+
+## Toolchain
+### Node side
+- Arduino IDE
+- Arduino-Pico core
+- RadioLib
+- TinyGPSPlus
+
+### Gateway side
+- Raspberry Pi OS
+- C in terminal
+- spidev for SPI
+- libgpiod for GPIO
+
+## Initial topology
+- point-to-point uplink only
+- no mesh
+- no relay
+- no ACK yet
+- final target supports 2–3 nodes
+
+## Node IDs
+- node 1
+- node 2
+- node 3
+
+## First packet format
+[node_id:1][seq:1][timestamp:4][lat_i32:4][lon_i32:4][alt_i16:2][sats:1][fix:1][reserved:1]
+
+Total: 18 bytes
+
+## Coordinate encoding
+lat_i32 = latitude * 1e7
+lon_i32 = longitude * 1e7
+
+## First radio-mode goal
+- same frequency on all devices
+- same BW/SF/CR on all devices
+- one-way uplink only
+- staggered transmissions later for multi-node operation
+
+## First milestone
+One Pico node sends one valid fixed-format packet.
+Pi 4 receives and decodes it correctly.
