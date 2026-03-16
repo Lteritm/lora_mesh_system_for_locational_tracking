@@ -1,0 +1,21 @@
+////
+ESP32-S3 NXR8  ->  Lambda62-1
+3V3            ->  Vcc
+GND            ->  GND
+GPIO12         ->  SCLK
+GPIO13         ->  SDO
+GPIO11         ->  SDI
+GPIO10         ->  nSEL
+GPIO14         ->  BUSY
+GPIO9          ->  DIO1
+GPIO15         ->  RESET
+GPIO16         ->  RX_SWITCH
+GPIO17         ->  TX_SWITCH
+
+ESP32-S3 NXR8  ->  Waveshare L76X
+3V3            ->  VCC
+GND            ->  GND
+GPIO4          ->  L76X TX
+GPIO5          ->  L76X RX
+GPIO6          ->  PPS
+//////
