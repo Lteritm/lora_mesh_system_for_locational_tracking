@@ -1,0 +1,97 @@
+from flask import Flask, request, jsonify
+import time
+
+app = Flask(__name__)
+
+nodes = {}
+packets = []
+
+ONLINE_TIMEOUT = 30
+STALE_TIMEOUT = 90
+
+def parse_payload(raw):
+    parts = raw.split(",")
+    node = parts[0]
+    seq = int(parts[1])
+    profile = "unknown"
+
+    if len(parts) >= 5:
+        profile = parts[2] + "/" + parts[3] + "/" + parts[4]
+
+    return node, seq, profile
+
+@app.route("/api/ingest", methods=["POST"])
+def ingest():
+
+    data = request.json
+    raw = data["raw"]
+    rssi = float(data["rssi"])
+    snr = float(data["snr"])
+
+    node, seq, profile = parse_payload(raw)
+
+    now = time.time()
+
+    if node not in nodes:
+        nodes[node] = {
+            "packets":0,
+            "last_seq":seq
+        }
+
+    n = nodes[node]
+
+    n["packets"] += 1
+    n["last_seen"] = now
+    n["rssi"] = rssi
+    n["snr"] = snr
+    n["seq"] = seq
+    n["profile"] = profile
+
+    packets.append({
+        "node":node,
+        "time":now,
+        "rssi":rssi,
+        "snr":snr
+    })
+
+    if len(packets) > 500:
+        packets.pop(0)
+
+    return jsonify({"status":"ok"})
+
+@app.route("/api/status")
+def status():
+
+    now = time.time()
+    out = []
+
+    for node,n in nodes.items():
+
+        age = now - n["last_seen"]
+
+        if age < ONLINE_TIMEOUT:
+            state = "online"
+        elif age < STALE_TIMEOUT:
+            state = "stale"
+        else:
+            state = "offline"
+
+        out.append({
+            "id":node,
+            "status":state,
+            "last_seen":round(age,1),
+            "rssi":n["rssi"],
+            "snr":n["snr"],
+            "seq":n["seq"],
+            "packets":n["packets"],
+            "profile":n["profile"]
+        })
+
+    return jsonify(out)
+
+@app.route("/api/history")
+def history():
+    return jsonify(packets)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0",port=8080)
